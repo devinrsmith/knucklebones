@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::fmt;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Die {
     ONE = 1,
     TWO = 2,
@@ -46,7 +47,7 @@ fn overlaps<T: Hand>(hand_1: &T, hand_2: &T) -> bool {
         || (hand_1.has(Die::SIX) && hand_2.has(Die::SIX))
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct HandExplicit {
     die_1: Option<Die>,
 
@@ -192,6 +193,110 @@ impl fmt::Display for Die {
             Die::FIVE => write!(f, "5"),
             Die::SIX => write!(f, "6"),
         }
+    }
+}
+
+struct HandPairs {
+    ix_to_hand: HashMap<u16, (HandExplicit, HandExplicit)>,
+    hand_to_ix: HashMap<(HandExplicit, HandExplicit), u16>,
+}
+
+impl HandPairs {
+    fn new() -> HandPairs {
+        let hands = hands();
+        let hand_pairs = hand_pairs(hands);
+        let mut ix_to_hand = HashMap::with_capacity(hand_pairs.len());
+        let mut hand_to_ix = HashMap::with_capacity(hand_pairs.len());
+        let mut ix: u16 = 0;
+        for hand_pair in hand_pairs.iter() {
+            ix_to_hand.insert(ix, *hand_pair);
+            hand_to_ix.insert(*hand_pair, ix);
+            ix += 1;
+        }
+        HandPairs {
+            ix_to_hand,
+            hand_to_ix,
+        }
+    }
+
+    fn get_by_index(&self, ix: u16) -> &(HandExplicit, HandExplicit) {
+        self.ix_to_hand.get(&ix).unwrap()
+    }
+
+    fn get_by_hand(&self, hand_pair: &(HandExplicit, HandExplicit)) -> u16 {
+        *self.hand_to_ix.get(hand_pair).unwrap()
+    }
+}
+
+struct State {
+    column_1: u16,
+    column_2: u16, // >= column_2
+    column_3: u16, // >= column_3
+}
+
+impl State {
+    fn new(
+        hand_pairs: &HandPairs,
+        column_a: &(HandExplicit, HandExplicit),
+        column_b: &(HandExplicit, HandExplicit),
+        column_c: &(HandExplicit, HandExplicit),
+    ) -> State {
+        State::new_by_index(
+            hand_pairs.get_by_hand(column_a),
+            hand_pairs.get_by_hand(column_b),
+            hand_pairs.get_by_hand(column_c),
+        )
+    }
+
+    fn new_by_index(column_a: u16, column_b: u16, column_c: u16) -> State {
+        let mut x = [column_a, column_b, column_c];
+        x.sort_unstable();
+        State {
+            column_1: x[0],
+            column_2: x[1],
+            column_3: x[2],
+        }
+    }
+
+    fn hands<'a>(
+        &'a self,
+        hand_pairs: &'a HandPairs,
+    ) -> (
+        &(HandExplicit, HandExplicit),
+        &(HandExplicit, HandExplicit),
+        &(HandExplicit, HandExplicit),
+    ) {
+        (
+            hand_pairs.get_by_index(self.column_1),
+            hand_pairs.get_by_index(self.column_2),
+            hand_pairs.get_by_index(self.column_3),
+        )
+    }
+
+    fn reverse(&self, hand_pairs: &HandPairs) -> State {
+        let (c1, c2, c3) = self.hands(hand_pairs);
+        State::new(hand_pairs, &(c1.1, c1.0), &(c2.1, c2.0), &(c3.1, c3.0))
+    }
+
+    fn is_done(&self, hand_pairs: &HandPairs) -> bool {
+        let (c1, c2, c3) = self.hands(hand_pairs);
+        (c1.0.is_full() && c2.0.is_full() && c3.0.is_full())
+            || (c1.1.is_full() && c2.1.is_full() && c3.1.is_full())
+    }
+
+    fn num_choices(&self, hand_pairs: &HandPairs) -> u8 {
+        let (c1, c2, c3) = self.hands(hand_pairs);
+        let mut x = 0;
+        if !c1.0.is_full() {
+            x += 1;
+        }
+        if !c2.0.is_full() {
+            x += 1;
+        }
+        if !c3.0.is_full() {
+            x += 1;
+        }
+        x
     }
 }
 
